@@ -36,13 +36,13 @@ U
 
 # Mencari banyak kelas
 # 1. Menghitung rata-rata selisih absolut antar data
-n <- length(X)
+n <- length(data)
 n
-delta_X <- abs(diff(X))  # Menghitung perubahan absolut antar nilai
+delta_X <- abs(diff(data))  # Menghitung perubahan absolut antar nilai
 delta_X
-write.xlsx(as.data.frame(delta_X), "selisih data.xlsx")
-sum(delta_X)
-mean_delta <- sum(delta_X)/n  # Menghitung rata-rata perubahan
+sum_delta <- sum(delta_X, na.rm = TRUE)
+sum_delta
+mean_delta <- mean(delta_X, na.rm = TRUE)
 mean_delta
 
 #Menentukan panjang interval (l = Mean/2)
@@ -85,14 +85,14 @@ print("Nilai Tengah Interval:")
 print(nilai_tengah)
 
 #Fuzzyfikasi data aktual
-fuzzyfikasi <- numeric(length(X))
-for (i in 1:length(X)) {
+fuzzyfikasi <- numeric(length(data))
+for (i in 1:length(data)) {
   for (j in 1:nrow(box1)) {
-    if (X[i] >= box1$bawah[j] & X[i] < box1$atas[j]) {
+    if (data[i] >= box1$bawah[j] & data[i] < box1$atas[j]) {
       fuzzyfikasi[i] = box1$kel[j]
       break
     }
-    if (X[i] == box1$atas[j] & j == nrow(box1)) {
+    if (data[i] == box1$atas[j] & j == nrow(box1)) {
       fuzzyfikasi[i] = box1$kel[j]
     }
   }
@@ -101,13 +101,13 @@ print("Fuzzyfikasi Data:")
 print(fuzzyfikasi)
 
 #Menggabungkan hasil dalam DataFrame
-Fuzzyfi <- data.frame(Data = X, Fuzzyfikasi = fuzzyfikasi)
+Fuzzyfi <- data.frame(Data = data, Fuzzyfikasi = fuzzyfikasi)
 print("Hasil Fuzzyfikasi:")
 print(Fuzzyfi)
 
 
 #Fuzzyfikasi ke data asal
-Fuzzyfi <- data.frame(Data = X, Fuzzyfikasi = fuzzyfikasi)
+Fuzzyfi <- data.frame(Data = data, Fuzzyfikasi = fuzzyfikasi)
 Fuzzyfi
 
 #Pembetukan FLR (Fuzzy Logical Relationship)
@@ -148,20 +148,20 @@ print(defuzzified_values_chen_flrg)
 write.xlsx(as.data.frame(defuzzified_values_chen_flrg), "defuzz chen.xlsx")
 
 #Peramalan dgn FTS Chen
-chen_forecast_final <- numeric(length(data))
-chen_forecast_final[1] <- NA # No forecast for the first data point
+chen_forecast <- numeric(length(data))
+chen_forecast[1] <- NA # No forecast for the first data point
 for (i in 1:(length(data) - 1)) {
   current_fuzzy_state <- as.character(fuzzyfikasi[i])
   if (current_fuzzy_state %in% names(defuzzified_values_chen_flrg)) {
-    chen_forecast_final[i + 1] <- defuzzified_values_chen_flrg[current_fuzzy_state]
+    chen_forecast[i + 1] <- defuzzified_values_chen_flrg[current_fuzzy_state]
   } else {
     # If the current fuzzy state is not in the FLRG (e.g., it's a new state or last one)
     # Default to its own midpoint
-    chen_forecast_final[i + 1] <- nilai_tengah$tengah[nilai_tengah$kel == as.numeric(current_fuzzy_state)]
+    chen_forecast[i + 1] <- nilai_tengah$tengah[nilai_tengah$kel == as.numeric(current_fuzzy_state)]
   }
 }
 print("Peramalan Chen (Time Series):")
-print(chen_forecast_final)
+print(chen_forecast)
 
 #FTS CHENG
 # Matriks pembobotan untuk Cheng
@@ -182,22 +182,6 @@ print(matriks_pembobot)
 
 #Heatmap Matriks Pembobot
 library(dplyr)
-FLRG_freq <- FLR %>%
-  count(Current, Next) %>%
-  tidyr::pivot_wider(names_from = Next, values_from = n, values_fill = 0) %>%
-  tibble::column_to_rownames("Current")
-library(ggplot2)
-# Ubah matrix jadi long format
-library(reshape2)
-df_long <- melt(as.matrix(FLRG_freq))
-ggplot(df_long, aes(x = Var1, y = Var2, fill = value)) +
-  geom_tile(color = "white") +
-  scale_fill_gradient(low = "yellow", high = "black") +
-  labs(title = "Heatmap Matriks Pembobot",
-       x = "Current State", y = "Next State") +
-  theme_minimal()
-
-library(dplyr)
 library(tidyr)
 library(reshape2)
 library(ggplot2)
@@ -215,10 +199,10 @@ df_long <- melt(as.matrix(FLRG_freq))
 ggplot(df_long, aes(x = Var1, y = Var2, fill = value)) +
   geom_tile(color = "white") +
   scale_fill_gradientn(
-    colors = c("white", "blue",  # 0-3 (kuning muda ??? hijau muda)
-               "green", "#008000",  # 4-8 (hijau ??? hijau tua)
-               "yellow", "red",  # 9-12 (hijau gelap ??? biru)
-               "brown", "black"), # 13-16 (biru tua ??? ungu)
+    colors = c("white", "blue",  # 0–3 (kuning muda → hijau muda)
+               "green", "#008000",  # 4–8 (hijau → hijau tua)
+               "yellow", "red",  # 9–12 (hijau gelap → biru)
+               "brown", "black"), # 13–16 (biru tua → ungu)
     values = scales::rescale(c(0, 3, 4, 8, 9, 12, 13, 16)),
     limits = c(0, 16),
     name = "Frekuensi"
@@ -236,22 +220,14 @@ print("Matriks Bobot Probabilistik:")
 print(bobot_prob)
 
 # Heatmap untuk bobot probabilistik
-df_prob <- melt(bobot_prob)
-ggplot(df_prob, aes(x = Var1, y = Var2, fill = value)) +
-  geom_tile(color = "white") +
-  scale_fill_gradient(low = "white", high = "navy") +
-  labs(title = "Heatmap Matriks Bobot Probabilistik (Cheng)",
-       x = "Currrent State", y = "Next State") +
-  theme_minimal()
-
 # Plot heatmap
 ggplot(df_prob, aes(x = Var1, y = Var2, fill = value)) +
   geom_tile(color = "white") +
   scale_fill_gradientn(
-    colors = c("white", "#008000",     # 0-0.25 (kuning muda ke hijau muda)
-               "orange", "red",     # 0.26-0.5 (hijau ke hijau tua)
-               "blue", "navy",     # 0.6-0.75 (hijau gelap ke biru)
-               "purple", "black"),    # 0.76-1 (biru tua ke ungu)
+    colors = c("white", "#008000",     # 0–0.25 (kuning muda ke hijau muda)
+               "orange", "red",     # 0.26–0.5 (hijau ke hijau tua)
+               "blue", "navy",     # 0.6–0.75 (hijau gelap ke biru)
+               "purple", "black"),    # 0.76–1 (biru tua ke ungu)
     values = scales::rescale(c(0, 0.25, 0.26, 0.5, 0.6, 0.75, 0.76, 1)),
     limits = c(0, 1),
     name = "Probabilitas"
@@ -289,7 +265,7 @@ defuzzifikasi_cheng_flrg <- function(FLRG, nilai_tengah) {
         nilai_mid[length(valid_bobot_indices) + 1] <- match_val
         valid_bobot_indices <- c(valid_bobot_indices, state_name)
       } else {
-        cat("?????? Tidak ditemukan nilai tengah untuk state:", state_num, "\n")
+        cat("⚠️ Tidak ditemukan nilai tengah untuk state:", state_num, "\n")
       }
     }
     
@@ -312,30 +288,30 @@ print(defuzzified_values_cheng_flrg)
 write.xlsx(as.data.frame(defuzzified_values_cheng_flrg), "defuzz cheng.xlsx")
 
 # Peramalan dgn FTS Cheng
-cheng_forecast_final <- numeric(length(data))
-cheng_forecast_final[1] <- NA # No forecast for the first data point
+cheng_forecast <- numeric(length(data))
+cheng_forecast[1] <- NA # No forecast for the first data point
 
 for (i in 1:(length(data) - 1)) {
   current_fuzzy_state <- as.character(fuzzyfikasi[i])
   if (current_fuzzy_state %in% names(defuzzified_values_cheng_flrg)) {
-    cheng_forecast_final[i + 1] <- defuzzified_values_cheng_flrg[current_fuzzy_state]
+    cheng_forecast[i + 1] <- defuzzified_values_cheng_flrg[current_fuzzy_state]
   } else {
     # If the current fuzzy state is not in the FLRG (e.g., it's a new state or last one)
     # Default to its own midpoint
-    cheng_forecast_final[i + 1] <- nilai_tengah$tengah[nilai_tengah$kel == as.numeric(current_fuzzy_state)]
+    cheng_forecast[i + 1] <- nilai_tengah$tengah[nilai_tengah$kel == as.numeric(current_fuzzy_state)]
   }
 }
 print("Peramalan Cheng (Time Series):")
-print(cheng_forecast_final)
+print(cheng_forecast)
 
 # Gabungkan hasil ke dalam data frame
 dates <- index(data)
 hasil <- data.frame(
   Tanggal = dates,
-  Aktual = X,
+  Aktual = data,
   Fuzzyfikasi = fuzzyfikasi,
-  Chen = chen_forecast_final,
-  Cheng = cheng_forecast_final
+  Chen = chen_forecast,
+  Cheng = cheng_forecast
 )
 hasil
 
@@ -350,18 +326,18 @@ hasil_panjang <- hasil %>%
   pivot_longer(cols = c(Chen, Cheng), names_to = "Metode", values_to = "Peramalan")
 # Plot untuk Metode Chen
 plot_chen <- ggplot(hasil_panjang %>% filter(Metode == "Chen"), aes(x = Tanggal)) +
-  geom_line(aes(y = Aktual, color = "Aktual")) +
+  geom_line(aes(y = data, color = "Aktual")) +
   geom_line(aes(y = Peramalan, color = "Chen")) +
   labs(title = "Peramalan dengan Metode Chen", x = "Tanggal", y = "Harga") +
-  scale_color_manual(values = c("Aktual" = "black", "Chen" = "red")) +
+  scale_color_manual(values = c("Aktual" = "#16E959", "Chen" = "red")) +
   theme_minimal()
 
 # Plot untuk Metode Cheng
 plot_cheng <- ggplot(hasil_panjang %>% filter(Metode == "Cheng"), aes(x = Tanggal)) +
-  geom_line(aes(y = Aktual, color = "Aktual")) +
+  geom_line(aes(y = data, color = "Aktual")) +
   geom_line(aes(y = Peramalan, color = "Cheng")) +
   labs(title = "Peramalan dengan Metode Cheng", x = "Tanggal", y = "Harga") +
-  scale_color_manual(values = c("Aktual" = "black", "Cheng" = "blue")) +
+  scale_color_manual(values = c("Aktual" = "#16E959", "Cheng" = "red")) +
   theme_minimal()
 
 # Untuk menampilkan plot
@@ -385,20 +361,20 @@ hasil_3bulan <- hasil_panjang %>%
 
 # Plot gabungan
 plot_gabungan <- ggplot(hasil_3bulan, aes(x = Tanggal)) +
-  geom_line(aes(y = Aktual, color = "Aktual"), size = 1) +
-  geom_line(aes(y = Peramalan, color = Metode), size = 1) +
+  geom_line(aes(y = `BRIS.JK.Close`, color = "Aktual"), linewidth = 1) +
+  geom_line(aes(y = Peramalan, color = Metode), linewidth = 1) +
   labs(title = "Peramalan 3 Bulan Terakhir: Chen vs Cheng",
        x = "Tanggal", y = "Harga") +
-  scale_color_manual(values = c("Aktual" = "black", "Chen" = "red", "Cheng" = "blue")) +
+  scale_color_manual(values = c("Aktual" = "black", "Chen" = "skyblue", "Cheng" = "orange")) +
   theme_minimal()
 # Tampilkan plot
 print(plot_gabungan)
 
 # Evaluasi peramalan
-galat_chen <- abs(X - chen_forecast_original)
-galat_cheng <- abs(X - cheng_forecast_original)
-MAPE_chen <- mean(abs(galat_chen / X * 100), na.rm = TRUE)
-MAPE_cheng <- mean(abs(galat_cheng / X * 100), na.rm = TRUE)
+galat_chen <- abs(data$BRIS.JK.Close - chen_forecast)
+galat_cheng <- abs(data$BRIS.JK.Close - cheng_forecast)
+MAPE_chen <- mean(abs(galat_chen / data$BRIS.JK.Close * 100), na.rm = TRUE)
+MAPE_cheng <- mean(abs(galat_cheng / data$BRIS.JK.Close * 100), na.rm = TRUE)
 
 cat("MAPE Chen:", MAPE_chen, "%\n")
 cat("MAPE Cheng:", MAPE_cheng, "%\n")
@@ -411,190 +387,156 @@ write.xlsx(as.data.frame(galat_cheng), "galat cheng1.xlsx")
 # Ambil fuzzyfikasi terakhir
 last_fuzzy <- fuzzyfikasi[length(fuzzyfikasi)]
 
-# Prediksi Chen: Gunakan nilai tengah dari fuzzy terakhir
-forecast_chen_next <- nilai_tengah$tengah[last_fuzzy]
-forecast_chen_next
-
-
-# Calculate the single next-step forecast for Cheng
-last_fuzzy_state_num <- fuzzyfikasi[length(fuzzyfikasi)]
-last_fuzzy_state_char <- as.character(last_fuzzy_state_num)
-
-if (last_fuzzy_state_char %in% rownames(bobot_prob)) {
-  weights_for_last_state <- bobot_prob[last_fuzzy_state_char, ]
-  forecast_cheng_next_step <- 0
-  for (next_state_char in colnames(bobot_prob)) {
-    prob <- weights_for_last_state[next_state_char]
-    next_state_num <- as.numeric(next_state_char)
-    if (prob > 0 && next_state_num %in% names(nilai_tengah_map)) {
-      midpoint_val <- nilai_tengah_map[as.character(next_state_num)]
-      forecast_cheng_next_step <- forecast_cheng_next_step + (prob * midpoint_val)
-    }
-  }
+# Prediksi Cheng: Hitung rata-rata tertimbang berdasarkan matriks pembobotan
+if (!is.null(bobot[last_fuzzy, ]) && sum(bobot[last_fuzzy, ]) > 0) {
+  forecast_cheng_next <- sum(bobot_prob[last_fuzzy, ] * nilai_tengah$tengah)
 } else {
-  forecast_cheng_next_step <- nilai_tengah_map[last_fuzzy_state_char]
+  # Jika tidak ada probabilitas, fallback ke nilai tengah dari kelompok fuzzy terakhir
+  forecast_cheng_next <- nilai_tengah$tengah[last_fuzzy]
 }
-cat("Prediksi Cheng (One-Step Ahead):", forecast_cheng_next_step, "\n")
+forecast_cheng_next
 
+# Inisialisasi
+forecast_cheng <- c()  # Menyimpan hasil prediksi
+fuzzy_seq <- fuzzyfikasi  # Copy dari fuzzyfikasi awal
+current_fuzzy <- fuzzy_seq[length(fuzzy_seq)]  # Fuzzy terakhir
 
-# --- 6. Combine and Plot Data ---
-# Gabungkan hasil ke dalam data frame
-dates <- index(data)
-hasil <- data.frame(
-  Tanggal = dates,
-  Aktual = X,
-  Fuzzyfikasi = fuzzyfikasi,
-  Chen = chen_forecast_original,
-  Cheng = cheng_forecast_original
-)
-
-# Pivot to long format for plotting
-hasil_panjang <- hasil %>%
-  pivot_longer(cols = c(Chen, Cheng), names_to = "Metode", values_to = "Peramalan")
-
-# Ensure Tanggal is in Date format
-hasil_panjang$Tanggal <- as.Date(hasil_panjang$Tanggal)
-
-# Filter data for the last 3 months
-tanggal_akhir <- max(hasil_panjang$Tanggal, na.rm = TRUE)
-tanggal_awal_3bulan <- tanggal_akhir - days(90) # ~3 months (90 days)
-
-hasil_3bulan <- hasil_panjang %>%
-  filter(Tanggal >= tanggal_awal_3bulan)
-
-# Get the last date from your historical data to plot the forecast point
-last_actual_date <- max(hasil_panjang$Tanggal, na.rm = TRUE)
-
-# Create a data frame for the forecast point (this uses 'forecast_cheng_next_step')
-forecast_point_df <- data.frame(
-  Tanggal = last_actual_date + days(1), # Forecast is for the next day
-  Aktual = NA, # No actual data for the forecast point
-  Fuzzyfikasi = NA, # This column is crucial for rbind compatibility
-  Metode = "Cheng Forecast", # A new category for the single forecast point
-  Peramalan = forecast_cheng_next_step
-)
-
-# Combine the 3-month historical data with the new forecast point
-hasil_3bulan_with_forecast <- rbind(hasil_3bulan, forecast_point_df)
-
-# Plot gabungan with the added forecast point
-plot_gabungan_with_forecast <- ggplot(hasil_3bulan_with_forecast, aes(x = Tanggal)) +
-  geom_line(aes(y = Aktual, color = "Aktual"), size = 1) +
-  geom_line(aes(y = Peramalan, color = Metode), size = 1) +
-  # Add the specific forecast point with a distinct shape and color
-  geom_point(data = forecast_point_df, aes(y = Peramalan, color = Metode),
-             shape = 8, size = 3, stroke = 1.5) + # Shape 8 is a star, stroke makes it bolder
-  labs(title = "Peramalan 3 Bulan Terakhir: Chen vs Cheng dengan Prediksi Selanjutnya",
-       x = "Tanggal", y = "Harga") +
-  scale_color_manual(values = c("Aktual" = "black",
-                                "Chen" = "red",
-                                "Cheng" = "blue",
-                                "Cheng Forecast" = "darkgreen")) + # Distinct color for the forecast point
-  theme_minimal() +
-  theme(legend.position = "bottom")
-
-# Tampilkan plot
-print(plot_gabungan_with_forecast)
-
-# --- 6. Combine and Plot Data ---
-# Gabungkan hasil ke dalam data frame
-dates <- index(data)
-hasil <- data.frame(
-  Tanggal = dates,
-  Aktual = X,
-  Fuzzyfikasi = fuzzyfikasi,
-  Chen = chen_forecast_original,
-  Cheng = cheng_forecast_original
-)
-
-# Pivot to long format for plotting
-hasil_panjang <- hasil %>%
-  pivot_longer(cols = c(Chen, Cheng), names_to = "Metode", values_to = "Peramalan")
-
-# Ensure Tanggal is in Date format
-hasil_panjang$Tanggal <- as.Date(hasil_panjang$Tanggal)
-
-# Filter data for the last 3 months
-tanggal_akhir <- max(hasil_panjang$Tanggal, na.rm = TRUE)
-tanggal_awal_3bulan <- tanggal_akhir - days(90) # ~3 months (90 days)
-
-hasil_3bulan <- hasil_panjang %>%
-  filter(Tanggal >= tanggal_awal_3bulan)
-
-
-# Get the last date from your historical data (this will be the last trading day)
-last_actual_trading_date <- max(hasil_panjang$Tanggal, na.rm = TRUE)
-
-# --- Determine the next trading day for the forecast point ---
-# This function finds the next weekday, skipping Saturday and Sunday.
-# It does NOT account for public holidays (e.g., New Year's Day).
-# For specific year-end behavior (Dec 30 -> Jan 2), this simple function might not be enough.
-get_next_weekday <- function(current_date) {
-  next_day <- current_date + days(1)
-  # Loop until it's not a Saturday (6) or Sunday (7) - assuming week_start = 1 (Monday)
-  while (wday(next_day, week_start = 1) %in% c(6, 7)) {
-    next_day <- next_day + days(1)
+# Peramalan selama 7 hari
+for (i in 1:7) {
+  if (!is.null(bobot[current_fuzzy, ]) && sum(bobot[current_fuzzy, ]) > 0) {
+    prediksi <- sum(bobot_prob[current_fuzzy, ] * nilai_tengah$tengah)
+  } else {
+    # Fallback: jika tidak ada relasi, gunakan nilai tengah dari current fuzzy
+    prediksi <- nilai_tengah$tengah[current_fuzzy]
   }
-  return(next_day)
-}
-
-# Apply custom logic for the specific "Dec 30 -> Jan 2" scenario for 2024
-# If you run this in a different year, you might need to adjust this conditional.
-if (format(last_actual_trading_date, "%Y-%m-%d") == "2024-12-30") {
-  forecast_date_for_plot <- as.Date("2025-01-02") # Hardcode if 31st and 1st are non-trading
-} else {
-  forecast_date_for_plot <- get_next_weekday(last_actual_trading_date)
-}
-
-
-# Create a data frame for the forecast point
-forecast_point_df <- data.frame(
-  Tanggal = forecast_date_for_plot, # Use the determined 'next trading day'
-  Aktual = NA,
-  Fuzzyfikasi = NA, # Crucial for rbind compatibility
-  Metode = "Cheng Forecast",
-  Peramalan = forecast_cheng_next_step
-)
-
-# Find the last point of the 'Cheng' forecast line within the 3-month window
-last_cheng_forecast_data <- hasil_3bulan %>%
-  filter(Metode == "Cheng") %>%
-  arrange(Tanggal) %>%
-  slice_tail(n = 1)
-
-# Create a data frame for the connecting segment
-connecting_segment_df <- data.frame(
-  x1 = last_cheng_forecast_data$Tanggal,
-  y1 = last_cheng_forecast_data$Peramalan,
-  x2 = forecast_point_df$Tanggal, # Connect to the new forecast date
-  y2 = forecast_point_df$Peramalan,
-  Metode = "Cheng Forecast"
-)
-
-# Combine the 3-month historical data with the new forecast point
-hasil_3bulan_with_forecast <- rbind(hasil_3bulan, forecast_point_df)
-
-# Plot gabungan with the added forecast point and connecting segment
-plot_gabungan_with_forecast <- ggplot(hasil_3bulan_with_forecast, aes(x = Tanggal)) +
-  geom_line(aes(y = Aktual, color = "Aktual"), size = 1) +
-  geom_line(aes(y = Peramalan, color = Metode), size = 1) +
   
-  # Add the specific forecast point with a distinct shape and color
+  # Simpan hasil prediksi
+  forecast_cheng[i] <- prediksi
+  
+  # Lakukan fuzzyfikasi terhadap prediksi untuk iterasi berikutnya
+  selisih <- abs(nilai_tengah$tengah - prediksi)
+  current_fuzzy <- which.min(selisih)  # Cari interval fuzzy terdekat
+}
+
+# Output hasil prediksi
+forecast_cheng
+
+
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+
+# Misal data adalah xts/zoo dengan kolom BRIS.JK.Close
+
+# Ambil tanggal dari index data
+Tanggal <- index(data)
+
+# Buat dataframe hasil dengan kolom Tanggal dan prediksi Chen, Cheng
+hasil <- data.frame(
+  Tanggal = Tanggal,
+  Chen = chen_forecast,   # pastikan ini numeric vector sesuai tanggal
+  Cheng = cheng_forecast  # sama
+)
+
+# Tambahkan kolom Aktual jadi numeric vector dari xts
+hasil$Aktual <- as.numeric(coredata(data$BRIS.JK.Close))
+
+# Sekarang pivot_longer aman karena semua numeric
+hasil_panjang <- hasil %>%
+  pivot_longer(cols = c("Aktual", "Chen", "Cheng"),
+               names_to = "Metode",
+               values_to = "Peramalan")
+
+# Filter 3 bulan terakhir
+tanggal_akhir <- max(hasil_panjang$Tanggal, na.rm = TRUE)
+tanggal_awal_3bulan <- tanggal_akhir - 90
+hasil_3bulan <- hasil_panjang %>%
+  filter(Tanggal >= tanggal_awal_3bulan)
+
+# Gabungkan forecast_point_df yang sudah punya kolom Tanggal, Metode, Peramalan
+library(dplyr)
+hasil_3bulan_with_forecast <- bind_rows(hasil_3bulan, forecast_point_df)
+
+# Plot
+ggplot(hasil_3bulan_with_forecast, aes(x = Tanggal)) +
+  geom_line(aes(y = Peramalan, color = Metode), linewidth = 1) +
   geom_point(data = forecast_point_df, aes(y = Peramalan, color = Metode),
              shape = 8, size = 3, stroke = 1.5) +
-  
-  # Add the connecting segment from the last Cheng forecast to the new point
   geom_segment(data = connecting_segment_df, aes(x = x1, y = y1, xend = x2, yend = y2, color = Metode),
                linetype = "solid", size = 1, inherit.aes = FALSE) +
-  
+  scale_color_manual(values = c(
+    "Aktual" = "#16E959",
+    "Chen" = "red",
+    "Cheng" = "blue",
+    "Cheng Forecast" = "#eb1491"
+  )) +
   labs(title = "Peramalan 3 Bulan Terakhir: Chen vs Cheng dengan Prediksi Selanjutnya",
        x = "Tanggal", y = "Harga") +
-  scale_color_manual(values = c("Aktual" = "black",
-                                "Chen" = "red",
-                                "Cheng" = "blue",
-                                "Cheng Forecast" = "darkgreen")) +
   theme_minimal() +
   theme(legend.position = "bottom")
 
-# Tampilkan plot
-print(plot_gabungan_with_forecast)
+# PLOT CHEN DAN CHENG DAN & 7 hari peramalan
+# Asumsikan forecast_cheng sudah berisi hasil peramalan 7 hari
+# Buat tanggal peramalan dimulai dari 2 Januari 2025
+tanggal_forecast <- seq(as.Date("2025-01-02"), by = "day", length.out = 7)
+
+
+# 1. Pisahkan data Cheng dari hasil_3bulan untuk diproses
+cheng_historis_df <- hasil_3bulan %>% filter(Metode == "Cheng")
+
+# 2. Buat dataframe forecast Cheng, pastikan 'Metode' sama dengan historisnya ('Cheng')
+forecast_point_df <- data.frame(
+  Tanggal = tanggal_forecast,
+  Metode = "Cheng", # PENTING: Harus "Cheng" agar geom_line menyambungkan
+  Peramalan = forecast_cheng
+)
+
+# 3. Gabungkan data Cheng historis dan Cheng forecast menjadi satu dataframe 'Cheng'
+cheng_all_data <- bind_rows(cheng_historis_df, forecast_point_df) %>%
+  arrange(Tanggal) # Pastikan diurutkan berdasarkan tanggal
+
+# 4. Tambahkan kolom 'PlotColor' atau 'SegmentType' ke data Cheng
+cheng_all_data <- cheng_all_data %>%
+  mutate(PlotColor = ifelse(
+    Tanggal > max(cheng_historis_df$Tanggal),
+    "Cheng Forecast",
+    "Cheng Historis"
+  ))
+
+# 5. Gabungkan kembali semua data untuk plotting
+#    Pertama, saring data Cheng historis dari hasil_3bulan asli.
+hasil_3bulan_tanpa_cheng <- hasil_3bulan %>% filter(Metode != "Cheng")
+
+#    Kemudian, gabungkan data historis tanpa Cheng, dengan cheng_all_data.
+#    Di sini, kita juga perlu menambahkan 'PlotColor' untuk "Aktual" dan "Chen"
+#    agar mereka juga terdaftar di scale_color_manual.
+final_plot_data <- bind_rows(hasil_3bulan_tanpa_cheng, cheng_all_data) %>%
+  mutate(PlotColor = case_when(
+    Metode == "Aktual" ~ "Aktual",
+    Metode == "Chen" ~ "Chen",
+    TRUE ~ PlotColor # Ini akan menggunakan PlotColor yang sudah dibuat untuk Cheng
+  ))
+
+
+# 6. Atur urutan level factor untuk 'PlotColor' untuk kontrol legenda
+final_plot_data$PlotColor <- factor(final_plot_data$PlotColor,
+                                    levels = c("Aktual", "Chen", "Cheng Historis", "Cheng Forecast"))
+
+# 7. Plotting
+ggplot(final_plot_data, aes(x = Tanggal)) +
+  # Gunakan satu geom_line saja untuk semua data, dengan 'group = Metode'
+  # untuk memastikan garis yang berbeda tidak terhubung,
+  # dan 'color = PlotColor' untuk mengatur warna.
+  geom_line(aes(y = Peramalan, color = PlotColor, group = Metode), linewidth = 1) +
+  
+  # Scale warna manual untuk semua kategori PlotColor
+  scale_color_manual(values = c(
+    "Aktual" = "#16E959",
+    "Chen" = "red",
+    "Cheng Historis" = "blue",      # Warna untuk bagian historis Cheng
+    "Cheng Forecast" = "#eb1491"    # Warna khusus Cheng 7 hari ke depan (magenta)
+  )) +
+  labs(title = "Peramalan 3 Bulan Terakhir + 7 Hari ke Depan (Cheng)",
+       x = "Tanggal", y = "Harga") +
+  theme_minimal() +
+  theme(legend.position = "bottom")
