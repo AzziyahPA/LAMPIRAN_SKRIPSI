@@ -540,3 +540,70 @@ ggplot(final_plot_data, aes(x = Tanggal)) +
        x = "Tanggal", y = "Harga") +
   theme_minimal() +
   theme(legend.position = "bottom")
+
+library(quantmod)
+library(dplyr)
+library(ggplot2)
+library(lubridate)
+
+# 2. Ambil data aktual dari Yahoo Finance
+# Misal saham BRIS.JK, ambil dari 3 bulan sebelum 2025-01-02 hingga 7 hari sesudah
+start_date <- as.Date("2024-10-02")  # kira-kira 3 bulan sebelum 2 Jan 2025
+end_date <- as.Date("2025-01-09")    # 7 hari setelah 2 Jan 2025
+
+getSymbols("BRIS.JK", src = "yahoo", from = start_date, to = end_date, auto.assign = TRUE)
+aktual_df <- `BRIS.JK` %>%
+  as.data.frame() %>%
+  mutate(Tanggal = as.Date(rownames(.))) %>%
+  select(Tanggal, Close = `BRIS.JK.Close`) %>%
+  rename(Peramalan = Close) %>%
+  mutate(Metode = "Aktual")
+
+# 3. Gabungkan dengan hasil_3bulan (Chen dan Cheng historis)
+# Misal `hasil_3bulan` sudah memuat data dari metode Chen dan Cheng dalam format:
+# Tanggal | Metode | Peramalan
+
+# 4. Forecast Cheng (asumsikan sudah tersedia dalam variabel `forecast_cheng`)
+tanggal_forecast <- seq(as.Date("2025-01-02"), by = "day", length.out = 7)
+
+forecast_point_df <- data.frame(
+  Tanggal = tanggal_forecast,
+  Metode = "Cheng",
+  Peramalan = forecast_cheng
+)
+
+# 5. Data historis Cheng
+cheng_historis_df <- hasil_3bulan %>% filter(Metode == "Cheng")
+
+# 6. Gabungkan historis + forecast Cheng
+cheng_all_data <- bind_rows(cheng_historis_df, forecast_point_df) %>%
+  arrange(Tanggal) %>%
+  mutate(PlotColor = ifelse(Tanggal > max(cheng_historis_df$Tanggal), "Cheng Forecast", "Cheng Historis"))
+
+# 7. Gabungkan seluruh data untuk plot
+hasil_3bulan_tanpa_cheng <- hasil_3bulan %>% filter(Metode != "Cheng")
+
+final_plot_data <- bind_rows(hasil_3bulan_tanpa_cheng, cheng_all_data, aktual_df) %>%
+  mutate(PlotColor = case_when(
+    Metode == "Aktual" ~ "Aktual",
+    Metode == "Chen" ~ "Chen",
+    TRUE ~ PlotColor
+  ))
+
+# 8. Set faktor warna
+final_plot_data$PlotColor <- factor(final_plot_data$PlotColor,
+                                    levels = c("Aktual", "Chen", "Cheng Historis", "Cheng Forecast"))
+
+# 9. Plot
+ggplot(final_plot_data, aes(x = Tanggal)) +
+  geom_line(aes(y = Peramalan, color = PlotColor, group = Metode), linewidth = 1) +
+  scale_color_manual(values = c(
+    "Aktual" = "#16E959",
+    "Chen" = "red",
+    "Cheng Historis" = "blue",
+    "Cheng Forecast" = "#eb1491"
+  )) +
+  labs(title = "Peramalan 3 Bulan Terakhir + 7 Hari ke Depan (Cheng)",
+       x = "Tanggal", y = "Harga") +
+  theme_minimal() +
+  theme(legend.position = "bottom")
